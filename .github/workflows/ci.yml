@@ -6,8 +6,8 @@ on:
       При пуши на ветку, которую вы указали вот тут, будет запускаться пайплайн
 
 env:
-  CR_REGISTRY: README CR_REGISTRY
-  CR_REPOSITORY: README CR_REPOSITORY
+  CR_REGISTRY: [[README CR_REGISTRY Шаг 3]]
+  CR_REPOSITORY: [[README CR_REPOSITORY Шаг 4]]
   IMAGE_TAG: ${{ github.sha }}
 
 jobs:
@@ -21,28 +21,13 @@ jobs:
         uses: yc-actions/yc-cr-login@v0.1-alpha
 
         with:
-          yc-sa-json-credentials: ${{ secrets.YC_SA_JSON_CREDENTIALS }}
+          yc-sa-json-credentials: ${{ [[README Получение JSON авторизации для сервисного аккаунта]] }}
       - name: Build, tag, and push image to Yandex Cloud Container Registry
         run: |
-          docker build --target site -t cr.yandex/$CR_REGISTRY/$CR_REPOSITORY:site-$IMAGE_TAG -f test.Dockerfile .
-          docker push cr.yandex/$CR_REGISTRY/$CR_REPOSITORY:site-$IMAGE_TAG
+          docker build --target [[README_Dockerfile_target]] -t cr.yandex/$CR_REGISTRY/$CR_REPOSITORY:[[README_Dockerfile_image_name]]-$IMAGE_TAG -f [[README_Dockerfile]] .
+          docker push cr.yandex/$CR_REGISTRY/$CR_REPOSITORY:[[README_Dockerfile_image_name]]-$IMAGE_TAG
           
-          docker build --target daemon -t cr.yandex/$CR_REGISTRY/$CR_REPOSITORY:daemon-$IMAGE_TAG -f test.Dockerfile .
-          docker push cr.yandex/$CR_REGISTRY/$CR_REPOSITORY:daemon-$IMAGE_TAG
 
-      - name: Send Telegram notification
-        if: always()
-        uses: appleboy/telegram-action@master
-        with:
-          to: ${{ secrets.TELEGRAM_TO }}
-          token: ${{ secrets.TELEGRAM_TOKEN }}
-          # message_thread_id: ${{ secrets.TELEGRAM_THREAD_ID }}  # ID треда
-          message: |
-            🔔сборка ${{ job.status }}
-            ‍👨🏿‍💻автор ${{ github.actor }}
-            репозиторий: ${{ github.repository }}
-            ветка: ${{ github.ref }}
-            коммит: ${{ github.sha }}
 
 
   deploy:
@@ -54,7 +39,7 @@ jobs:
 
     - name: Install and init Yandex Cloud CLI
       env:
-        YC_SERVICE_ACCOUNT_KEY: ${{ secrets.YC_SA_JSON_CREDENTIALS }}
+        YC_SERVICE_ACCOUNT_KEY: ${{ [[README Получение JSON авторизации для сервисного аккаунта(выбираем нужный ключ)]] }}
       run: |
         curl https://storage.yandexcloud.net/yandexcloud-yc/install.sh | bash
         shopt -s expand_aliases
@@ -63,47 +48,25 @@ jobs:
         echo "$YC_SERVICE_ACCOUNT_KEY" > ./sa-key.json
         yc config set service-account-key ./sa-key.json
 
-    - name: Get kubeconfig
+
+    - name: Deploy to Yandex Cloud Serverless Containers
       run: |
         shopt -s expand_aliases
         alias yc="/home/runner/yandex-cloud/bin/yc"
-        yc managed-kubernetes cluster get-credentials --id ${{ secrets.YC_CLUSTER_ID }} --external
-        echo "K8S_CONTEXT_NAME=$(yc managed-kubernetes cluster get cat90fh1a1m05rh0118j --format=json | jq '.name')" >> $GITHUB_ENV
+        yc serverless container revision deploy \
+          --container-id $YC_CONTAINER_ID \
+          --image cr.yandex/$CR_REGISTRY/$CR_PROD_REPOSITORY:[[README_Dockerfile_image_name]]-$IMAGE_TAG \
+          --cores 1 \
+          --memory 1GB \
+          --concurrency 5 \
+          --min-instances 0 \
+          --zone-instances-limit 3 \
+          --zone-requests-limit 15 \
+          --execution-timeout 90s \
+          --log-group-id [[README ID лог группы]] \
+          --network-id [[README ID сети]] \
+          --service-account-id ${{ [[README Получение ID сервисного аккаунта]] }}
+          --secret environment-variable=[[README Секреты для деплоя, id и ключ (пример ниже)]] \
+          --secret environment-variable=BIG_SECRET,id=qwe123rty4567890,key=BIG_SECRET
 
-    - name: Deploy Testing Site to Kubernetes
-      run: |
-        kubectl config use-context yc-${{ env.K8S_CONTEXT_NAME }}
-        sed -i "s,VERSION,cr.yandex/$CR_REGISTRY/$CR_REPOSITORY:site-$IMAGE_TAG," testing.yaml
-        kubectl apply -f testing.yaml -n testing
-        
 
-    - name: Deploy Testing Daemon to Kubernetes
-      run: |
-        kubectl config use-context yc-${{ env.K8S_CONTEXT_NAME }}
-        sed -i "s,VERSION,cr.yandex/$CR_REGISTRY/$CR_REPOSITORY:daemon-$IMAGE_TAG," daemon.yaml
-        kubectl apply -f daemon.yaml -n testing
-        
-
-        sed -i "s,VERSION,cr.yandex/$CR_REGISTRY/$CR_REPOSITORY:daemon-$IMAGE_TAG," kubernetes_cron/cronjob.yaml
-        kubectl apply -f kubernetes_cron/cronjob.yaml -n testing
-        
-        
-        sed -i "s,VERSION,cr.yandex/$CR_REGISTRY/$CR_REPOSITORY:daemon-$IMAGE_TAG," kubernetes_cron/1hour/test-orders-statistics-1h.yaml
-        kubectl apply -f kubernetes_cron/1hour/test-orders-statistics-1h.yaml -n testing
-
-        sed -i "s,VERSION,cr.yandex/$CR_REGISTRY/$CR_REPOSITORY:daemon-$IMAGE_TAG," kubernetes_cron/24hour/test-orders-statistics-24h.yaml
-        kubectl apply -f kubernetes_cron/24hour/test-orders-statistics-24h.yaml -n testing
-#        kubectl apply -f kubernetes_cron/delete_failed_pods.yaml -n testing
-    - name: Send Telegram notification
-      if: always()
-      uses: appleboy/telegram-action@master
-      with:
-        to: ${{ secrets.TELEGRAM_TO }}
-        token: ${{ secrets.TELEGRAM_TOKEN }}
-        # message_thread_id: ${{ secrets.TELEGRAM_THREAD_ID }}  # ID треда
-        message: |
-          🔔 деплой ${{ job.status }}
-          👨🏿‍💻автор: ${{ github.actor }}
-          репозиторий: ${{ github.repository }}
-          ветка: ${{ github.ref }}
-          коммит: ${{ github.sha }}
