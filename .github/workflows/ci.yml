@@ -63,10 +63,11 @@ jobs:
           --zone-instances-limit 3 \
           --zone-requests-limit 15 \
           --execution-timeout 90s \
-          --log-group-id [[README ID лог группы]] \
-          --network-id [[README ID сети]] \
+          --log-group-id [[README Создание Log группы]] \
+          --network-id [[README Создание сети в Yandex Cloud]] \
           --service-account-id ${{ [[README Получение ID сервисного аккаунта]] }}
           --secret environment-variable=[[README Секреты для деплоя, id и ключ (пример ниже)]] \
-          --secret environment-variable=BIG_SECRET,id=qwe123rty4567890,key=BIG_SECRET
+          --secret environment-variable=BIG_SECRET,id=qwe123rty4567890,key=BIG_SECRET_LOCKBOX
+
 
 
